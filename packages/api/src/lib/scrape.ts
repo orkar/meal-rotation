@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio';
+import he from 'he';
 
 export type ScrapedRecipe = {
   title: string;
@@ -10,7 +11,8 @@ export type ScrapedRecipe = {
 };
 
 function normalizeText(value: string): string {
-  return value
+  return he
+    .decode(value)
     .replace(/\s+/g, ' ')
     .replace(/\u00a0/g, ' ')
     .trim();
