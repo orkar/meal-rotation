@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 
+import { Prisma } from '@prisma/client';
 import { asyncRoute } from '../lib/async-route.js';
 import { prisma } from '../lib/db.js';
 import { HttpError } from '../lib/http-error.js';
@@ -129,7 +130,9 @@ router.put(
       data: {
         ...(body.title ? { title: body.title } : {}),
         ...(body.notes !== undefined ? { notes: body.notes } : {}),
-        ...(body.tags !== undefined ? { tags: body.tags } : {})
+        ...(body.tags !== undefined
+          ? { tags: body.tags === null ? Prisma.JsonNull : body.tags }
+          : {})
       }
     });
 

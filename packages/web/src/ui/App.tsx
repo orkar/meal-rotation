@@ -52,10 +52,11 @@ export function App() {
       return;
     }
 
+    const id = selectedId;
     let cancelled = false;
 
     async function load() {
-      const r = await getRecipe(selectedId);
+      const r = await getRecipe(id);
       if (!cancelled) {
         setSelected(r);
         setEditTitle(r.title ?? '');
