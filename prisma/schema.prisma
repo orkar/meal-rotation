@@ -1,0 +1,38 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ScrapeStatus {
+  pending
+  ok
+  error
+}
+
+model Recipe {
+  id            Int          @id @default(autoincrement())
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  title         String
+  sourceUrl     String       @unique
+  sourceHost    String?
+
+  imageUrl      String?
+  description   String?
+
+  ingredients   Json?        // string[]
+  instructions  Json?        // string[]
+
+  scrapeStatus  ScrapeStatus @default(pending)
+  scrapeError   String?
+  lastScrapedAt DateTime?
+
+  // Manual fields (never overwritten by scraping)
+  notes         String?
+  tags          Json?        // string[]
+}

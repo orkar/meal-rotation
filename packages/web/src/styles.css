@@ -1,0 +1,225 @@
+:root {
+  --bg: #0b0f17;
+  --panel: rgba(16, 23, 35, 0.82);
+  --panel-strong: rgba(16, 23, 35, 0.92);
+  --ink: rgba(246, 248, 255, 0.95);
+  --muted: rgba(210, 220, 238, 0.72);
+  --line: rgba(167, 194, 255, 0.14);
+  --line-strong: rgba(167, 194, 255, 0.22);
+  --accent: #6ee7ff;
+  --accent-soft: #a78bfa;
+  --accent-cool: #34d399;
+  --danger: #fb7185;
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  --shadow-soft: 0 14px 40px rgba(0, 0, 0, 0.35);
+}
+
+html {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 10% 10%, rgba(110, 231, 255, 0.18), transparent 55%),
+    radial-gradient(circle at 85% 15%, rgba(167, 139, 250, 0.16), transparent 50%),
+    radial-gradient(circle at 25% 85%, rgba(52, 211, 153, 0.12), transparent 55%),
+    linear-gradient(135deg, #0b0f17 0%, #0a1220 45%, #070a10 100%);
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+}
+
+.container {
+  width: min(1080px, calc(100% - 2.4rem));
+  margin: 0 auto;
+  padding: 2.2rem 0 2.8rem;
+}
+
+.hero {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: linear-gradient(
+    130deg,
+    rgba(18, 26, 40, 0.92) 0%,
+    rgba(14, 20, 32, 0.88) 55%,
+    rgba(10, 16, 26, 0.86) 100%
+  );
+  box-shadow: var(--shadow);
+  padding: 1.6rem 1.7rem;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
+  letter-spacing: -0.02em;
+}
+
+.hero p {
+  margin: 0.45rem 0 0;
+  color: var(--muted);
+  max-width: 70ch;
+}
+
+.grid {
+  margin-top: 1.2rem;
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 1.2rem;
+}
+
+@media (max-width: 920px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
+  padding: 1rem;
+  backdrop-filter: blur(10px);
+}
+
+.panel h2 {
+  margin: 0;
+  font-size: 1rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(210, 220, 238, 0.82);
+}
+
+.row {
+  display: flex;
+  gap: 0.7rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.input {
+  flex: 1;
+  min-width: 240px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(2, 6, 23, 0.25);
+  color: var(--ink);
+  padding: 0.7rem 0.8rem;
+  outline: none;
+}
+
+.input:focus {
+  border-color: rgba(110, 231, 255, 0.5);
+  box-shadow: 0 0 0 4px rgba(110, 231, 255, 0.12);
+}
+
+.btn {
+  border-radius: 999px;
+  padding: 0.65rem 0.95rem;
+  border: 1px solid var(--line);
+  background: rgba(16, 23, 35, 0.55);
+  color: var(--ink);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn:hover {
+  border-color: var(--line-strong);
+}
+
+.btn.primary {
+  background: linear-gradient(135deg, rgba(110, 231, 255, 0.95), rgba(52, 211, 153, 0.85));
+  color: rgba(7, 16, 24, 0.96);
+  border-color: rgba(110, 231, 255, 0.55);
+}
+
+.list {
+  margin-top: 0.85rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 0.95rem;
+  background: linear-gradient(135deg, rgba(16, 23, 35, 0.75), rgba(10, 16, 26, 0.55));
+}
+
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.card h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.card small {
+  color: var(--muted);
+}
+
+.badge {
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(167, 139, 250, 0.2);
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  color: rgba(210, 220, 238, 0.9);
+  white-space: nowrap;
+}
+
+.badge.ok {
+  background: rgba(52, 211, 153, 0.14);
+  border-color: rgba(52, 211, 153, 0.22);
+}
+
+.badge.pending {
+  background: rgba(110, 231, 255, 0.12);
+  border-color: rgba(110, 231, 255, 0.22);
+}
+
+.badge.error {
+  background: rgba(251, 113, 133, 0.12);
+  border-color: rgba(251, 113, 133, 0.22);
+}
+
+.detail h2 {
+  margin-bottom: 0.8rem;
+}
+
+.kv {
+  margin-top: 0.7rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.kv b {
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(210, 220, 238, 0.82);
+}
+
+.pre {
+  white-space: pre-wrap;
+  color: rgba(210, 220, 238, 0.88);
+  line-height: 1.55;
+}
+
+.error {
+  margin-top: 0.7rem;
+  color: var(--danger);
+}

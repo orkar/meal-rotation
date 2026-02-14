@@ -1,0 +1,13 @@
+node_modules
+.env
+.DS_Store
+
+# build
+packages/api/dist
+packages/web/dist
+
+# prisma
+prisma/dev.db
+
+# logs
+*.log
