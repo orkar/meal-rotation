@@ -11,3 +11,12 @@ prisma/dev.db
 
 # logs
 *.log
+
+# Vite caches (can be created by build/dev)
+.vite-cache
+**/.vite-cache
+**/.vite-temp
+**/.vite-temp.*
+
+# Cleanup artifacts when a container created root-owned node_modules
+**/node_modules.rootowned.*
