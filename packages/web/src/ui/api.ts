@@ -50,3 +50,11 @@ export async function rescrapeRecipe(id: number): Promise<Recipe> {
   const data = await apiFetch(`/recipes/${id}/rescrape`, { method: 'POST' });
   return data.recipe;
 }
+
+export async function updateRecipe(
+  id: number,
+  patch: { title?: string; notes?: string | null; tags?: string[] | null }
+): Promise<Recipe> {
+  const data = await apiFetch(`/recipes/${id}`, { method: 'PUT', body: JSON.stringify(patch) });
+  return data.recipe;
+}

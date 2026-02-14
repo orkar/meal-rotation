@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 import type { Recipe } from './api';
-import { createRecipe, getRecipe, listRecipes, rescrapeRecipe } from './api';
+import { createRecipe, getRecipe, listRecipes, rescrapeRecipe, updateRecipe } from './api';
 
 function statusClass(status: Recipe['scrapeStatus']): string {
   if (status === 'ok') return 'badge ok';
@@ -26,6 +26,8 @@ export function App() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selected, setSelected] = useState<Recipe | null>(null);
   const [sourceUrl, setSourceUrl] = useState('');
+  const [editTitle, setEditTitle] = useState('');
+  const [editNotes, setEditNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,7 +56,11 @@ export function App() {
 
     async function load() {
       const r = await getRecipe(selectedId);
-      if (!cancelled) setSelected(r);
+      if (!cancelled) {
+        setSelected(r);
+        setEditTitle(r.title ?? '');
+        setEditNotes((r.notes ?? '').toString());
+      }
     }
 
     void load().catch((e) => setError(e instanceof Error ? e.message : 'Unknown error'));
@@ -86,6 +92,24 @@ export function App() {
     setBusy(true);
     try {
       const updated = await rescrapeRecipe(selectedId);
+      setSelected(updated);
+      await refreshList();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onSaveEdits() {
+    if (!selectedId) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const updated = await updateRecipe(selectedId, {
+        title: editTitle.trim() || undefined,
+        notes: editNotes.trim() ? editNotes : null
+      });
       setSelected(updated);
       await refreshList();
     } catch (e) {
@@ -172,6 +196,28 @@ export function App() {
               <div className="kv">
                 <b>Instructions</b>
                 <div className="pre">{stringifyList(selected.instructions) || 'No instructions extracted yet.'}</div>
+              </div>
+
+              <div className="kv">
+                <b>Edit</b>
+                <div className="row" style={{ marginTop: '0.35rem' }}>
+                  <input className="input" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+                </div>
+                <div className="row" style={{ marginTop: '0.6rem' }}>
+                  <textarea
+                    className="input"
+                    value={editNotes}
+                    onChange={(e) => setEditNotes(e.target.value)}
+                    placeholder="Notes (optional)"
+                    rows={5}
+                    style={{ width: '100%', resize: 'vertical', minHeight: 110 }}
+                  />
+                </div>
+                <div className="row" style={{ justifyContent: 'flex-end', marginTop: '0.6rem' }}>
+                  <button className="btn" type="button" disabled={busy} onClick={onSaveEdits}>
+                    Save
+                  </button>
+                </div>
               </div>
 
               {selectedSummary?.lastScrapedAt && (
