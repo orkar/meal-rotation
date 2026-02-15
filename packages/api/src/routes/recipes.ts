@@ -24,6 +24,7 @@ router.get(
   '/',
   asyncRoute(async (_req, res) => {
     const recipes = await prisma.recipe.findMany({
+      where: { userId: _req.userId },
       orderBy: { updatedAt: 'desc' },
       select: {
         id: true,
@@ -44,8 +45,12 @@ router.post(
   '/',
   asyncRoute(async (req, res) => {
     const body = createSchema.parse(req.body);
+    const userId = req.userId!;
 
-    const existing = await prisma.recipe.findUnique({ where: { sourceUrl: body.sourceUrl }, select: { id: true } });
+    const existing = await prisma.recipe.findFirst({
+      where: { userId, sourceUrl: body.sourceUrl },
+      select: { id: true }
+    });
     if (existing) {
       res.status(200).json({ id: existing.id, alreadyExists: true });
       return;
@@ -55,6 +60,7 @@ router.post(
 
     const recipe = await prisma.recipe.create({
       data: {
+        userId,
         title: body.title ?? url.hostname,
         sourceUrl: body.sourceUrl,
         sourceHost: url.hostname,
@@ -67,30 +73,46 @@ router.post(
     void (async () => {
       try {
         const scraped = await scrapeRecipe(body.sourceUrl);
-        await prisma.recipe.update({
-          where: { id: recipe.id },
-          data: {
-            title: body.title ?? scraped.title,
-            description: scraped.description,
-            imageUrl: scraped.imageUrl,
-            ingredients: scraped.ingredients ?? undefined,
-            instructions: scraped.instructions ?? undefined,
-            sourceHost: scraped.sourceHost,
-            scrapeStatus: 'ok',
-            scrapeError: null,
-            lastScrapedAt: new Date()
+        try {
+          await prisma.recipe.update({
+            where: { id: recipe.id },
+            data: {
+              title: body.title ?? scraped.title,
+              description: scraped.description,
+              imageUrl: scraped.imageUrl,
+              servings: scraped.servings ?? null,
+              servingsText: scraped.servingsText ?? null,
+              ingredients: scraped.ingredients ?? undefined,
+              instructions: scraped.instructions ?? undefined,
+              sourceHost: scraped.sourceHost,
+              scrapeStatus: 'ok',
+              scrapeError: null,
+              lastScrapedAt: new Date()
+            }
+          });
+        } catch (err) {
+          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+            return;
           }
-        });
+          throw err;
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown scrape error';
-        await prisma.recipe.update({
-          where: { id: recipe.id },
-          data: {
-            scrapeStatus: 'error',
-            scrapeError: message,
-            lastScrapedAt: new Date()
+        try {
+          await prisma.recipe.update({
+            where: { id: recipe.id },
+            data: {
+              scrapeStatus: 'error',
+              scrapeError: message,
+              lastScrapedAt: new Date()
+            }
+          });
+        } catch (err2) {
+          if (err2 instanceof Prisma.PrismaClientKnownRequestError && err2.code === 'P2025') {
+            return;
           }
-        });
+          throw err2;
+        }
       }
     })();
 
@@ -106,7 +128,7 @@ router.get(
       throw new HttpError(400, 'Invalid id');
     }
 
-    const recipe = await prisma.recipe.findUnique({ where: { id } });
+    const recipe = await prisma.recipe.findFirst({ where: { id, userId: req.userId! } });
     if (!recipe) {
       throw new HttpError(404, 'Recipe not found');
     }
@@ -124,6 +146,11 @@ router.put(
     }
 
     const body = updateSchema.parse(req.body);
+
+    const existing = await prisma.recipe.findFirst({ where: { id, userId: req.userId! }, select: { id: true } });
+    if (!existing) {
+      throw new HttpError(404, 'Recipe not found');
+    }
 
     const recipe = await prisma.recipe.update({
       where: { id },
@@ -148,13 +175,9 @@ router.delete(
       throw new HttpError(400, 'Invalid id');
     }
 
-    try {
-      await prisma.recipe.delete({ where: { id } });
-    } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
-        throw new HttpError(404, 'Recipe not found');
-      }
-      throw err;
+    const result = await prisma.recipe.deleteMany({ where: { id, userId: req.userId! } });
+    if (result.count === 0) {
+      throw new HttpError(404, 'Recipe not found');
     }
 
     res.json({ ok: true });
@@ -169,7 +192,7 @@ router.post(
       throw new HttpError(400, 'Invalid id');
     }
 
-    const recipe = await prisma.recipe.findUnique({ where: { id } });
+    const recipe = await prisma.recipe.findFirst({ where: { id, userId: req.userId! } });
     if (!recipe) {
       throw new HttpError(404, 'Recipe not found');
     }
@@ -187,6 +210,8 @@ router.post(
           title: scraped.title,
           description: scraped.description,
           imageUrl: scraped.imageUrl,
+          servings: scraped.servings ?? null,
+          servingsText: scraped.servingsText ?? null,
           ingredients: scraped.ingredients ?? undefined,
           instructions: scraped.instructions ?? undefined,
           sourceHost: scraped.sourceHost,

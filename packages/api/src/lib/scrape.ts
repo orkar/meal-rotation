@@ -5,6 +5,8 @@ export type ScrapedRecipe = {
   title: string;
   description?: string;
   imageUrl?: string;
+  servings?: number;
+  servingsText?: string;
   ingredients?: string[];
   instructions?: string[];
   sourceHost?: string;
@@ -168,6 +170,78 @@ function parseInstructions(value: unknown): string[] | undefined {
   return undefined;
 }
 
+const UNICODE_FRACTIONS: Record<string, string> = {
+  '¼': '1/4',
+  '½': '1/2',
+  '¾': '3/4',
+  '⅐': '1/7',
+  '⅑': '1/9',
+  '⅒': '1/10',
+  '⅓': '1/3',
+  '⅔': '2/3',
+  '⅕': '1/5',
+  '⅖': '2/5',
+  '⅗': '3/5',
+  '⅘': '4/5',
+  '⅙': '1/6',
+  '⅚': '5/6',
+  '⅛': '1/8',
+  '⅜': '3/8',
+  '⅝': '5/8',
+  '⅞': '7/8'
+};
+
+function normalizeFractions(text: string): string {
+  // Convert unicode fractions to ascii fractions so downstream parsing can be simple.
+  // Example: "1½" -> "1 1/2"
+  return text.replace(/[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]/g, (m) => ` ${UNICODE_FRACTIONS[m] ?? m} `);
+}
+
+function toFirstString(value: unknown): string | undefined {
+  if (!value) return undefined;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (Array.isArray(value)) {
+    for (const v of value) {
+      const s = toFirstString(v);
+      if (s) return s;
+    }
+  }
+  return undefined;
+}
+
+function parseFirstNumber(text: string): number | undefined {
+  const s = normalizeFractions(text);
+
+  // Prefer mixed fractions first.
+  const mixed = s.match(/(\d+)\s+(\d+)\s*\/\s*(\d+)/);
+  if (mixed) {
+    const whole = Number(mixed[1]);
+    const num = Number(mixed[2]);
+    const den = Number(mixed[3]);
+    if (Number.isFinite(whole) && Number.isFinite(num) && Number.isFinite(den) && den !== 0) {
+      return whole + num / den;
+    }
+  }
+
+  const frac = s.match(/(\d+)\s*\/\s*(\d+)/);
+  if (frac) {
+    const num = Number(frac[1]);
+    const den = Number(frac[2]);
+    if (Number.isFinite(num) && Number.isFinite(den) && den !== 0) {
+      return num / den;
+    }
+  }
+
+  const dec = s.match(/(\d+(?:\.\d+)?)/);
+  if (dec) {
+    const n = Number(dec[1]);
+    if (Number.isFinite(n)) return n;
+  }
+
+  return undefined;
+}
+
 export async function scrapeRecipe(sourceUrl: string): Promise<ScrapedRecipe> {
   const url = new URL(sourceUrl);
 
@@ -222,6 +296,13 @@ export async function scrapeRecipe(sourceUrl: string): Promise<ScrapedRecipe> {
 
   const title = typeof recipeNode['name'] === 'string' ? normalizeText(recipeNode['name']) : titleFromHtml;
   const description = typeof recipeNode['description'] === 'string' ? normalizeText(recipeNode['description']) : undefined;
+  const servingsRaw =
+    toFirstString(recipeNode['recipeYield']) ??
+    toFirstString(recipeNode['yield']) ??
+    toFirstString(recipeNode['recipeServings']) ??
+    toFirstString(recipeNode['servings']);
+  const servingsText = servingsRaw ? normalizeText(servingsRaw) : undefined;
+  const servings = servingsText ? parseFirstNumber(servingsText) : undefined;
   const ingredients = toStringArray(recipeNode['recipeIngredient']);
   const instructions = parseInstructions(recipeNode['recipeInstructions']);
   const imageUrl = pickImageUrl(recipeNode['image'], url) ?? pickMetaImageUrl($, url);
@@ -230,6 +311,8 @@ export async function scrapeRecipe(sourceUrl: string): Promise<ScrapedRecipe> {
     title,
     description,
     imageUrl,
+    servings,
+    servingsText,
     ingredients,
     instructions,
     sourceHost: url.hostname

@@ -48,6 +48,55 @@ body {
   min-height: 100vh;
 }
 
+.auth-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.2rem 1.2rem 2.8rem;
+}
+
+.auth-card {
+  width: min(560px, 100%);
+}
+
+.panel.auth-card {
+  padding: 1.35rem 1.45rem 1.25rem;
+}
+
+.auth-title {
+  margin: 0;
+  font-size: 1.6rem;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  font-family:
+    ui-serif,
+    "Iowan Old Style",
+    "Palatino Linotype",
+    Palatino,
+    Georgia,
+    serif;
+}
+
+.auth-subtitle {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1.35;
+  max-width: 64ch;
+}
+
+.auth-mode-row {
+  margin-top: 1.05rem;
+}
+
+.auth-mode-title {
+  font-weight: 950;
+  letter-spacing: -0.01em;
+  font-size: 1.25rem;
+}
+
 a {
   color: inherit;
 }
@@ -226,7 +275,7 @@ a {
 .recipe-banner {
   position: relative;
   width: 100%;
-  height: 86px;
+  height: var(--recipe-banner-height, 86px);
   border-radius: var(--radius-sm);
   overflow: hidden;
   margin-bottom: 0.75rem;
@@ -249,12 +298,10 @@ a {
 .recipe-banner-fade {
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    180deg,
-    rgba(0, 0, 0, 0.05) 0%,
-    rgba(0, 0, 0, 0.14) 50%,
-    rgba(251, 245, 234, 0.78) 100%
-  );
+  /* Subtle overlay to keep banners from looking "flat" without adding a bright bottom glow. */
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.03) 0%, rgba(0, 0, 0, 0.10) 60%, rgba(0, 0, 0, 0.00) 100%),
+    radial-gradient(90% 70% at 50% 115%, rgba(0, 0, 0, 0.18) 0%, transparent 60%);
 }
 
 .card-top {
@@ -283,6 +330,54 @@ a {
   color: var(--muted);
   margin-top: 0.2rem;
   max-width: 72ch;
+}
+
+.servings-row {
+  margin-top: 0.5rem;
+  display: flex;
+  gap: 0.9rem;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.servings-label {
+  font-weight: 800;
+  color: rgba(26, 23, 18, 0.82);
+}
+
+.multiplier {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: rgba(63, 55, 43, 0.74);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.multiplier-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(60, 50, 38, 0.16);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.multiplier-input {
+  width: 4.8rem;
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-weight: 900;
+  color: rgba(26, 23, 18, 0.86);
+}
+
+.multiplier-suffix {
+  color: rgba(63, 55, 43, 0.74);
+  font-weight: 900;
 }
 
 .badge {
@@ -391,6 +486,8 @@ a {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  /* Taller banner in the page-style full-screen view. */
+  --recipe-banner-height: 160px;
 }
 
 .fs-topbar {

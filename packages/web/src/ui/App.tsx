@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { Recipe } from './api';
-import { createRecipe, deleteRecipe, getRecipe, listRecipes, rescrapeRecipe, updateRecipe } from './api';
+import type { AuthUser, Recipe } from './api';
+import { authLogin, authLogout, authMe, authRegister, createRecipe, deleteRecipe, getRecipe, listRecipes, rescrapeRecipe, updateRecipe } from './api';
 
 function RecipeBanner({ title, imageUrl }: { title: string; imageUrl?: string | null }) {
   const [hidden, setHidden] = useState(false);
@@ -60,7 +60,164 @@ function stripLeadingStepNumber(s: string): string {
   return s.replace(/^\s*(?:step\s*)?\d+\s*[\).\:-]\s*/i, '').trim();
 }
 
+const UNICODE_FRACTIONS: Record<string, string> = {
+  '¼': '1/4',
+  '½': '1/2',
+  '¾': '3/4',
+  '⅐': '1/7',
+  '⅑': '1/9',
+  '⅒': '1/10',
+  '⅓': '1/3',
+  '⅔': '2/3',
+  '⅕': '1/5',
+  '⅖': '2/5',
+  '⅗': '3/5',
+  '⅘': '4/5',
+  '⅙': '1/6',
+  '⅚': '5/6',
+  '⅛': '1/8',
+  '⅜': '3/8',
+  '⅝': '5/8',
+  '⅞': '7/8'
+};
+
+function normalizeFractions(text: string): string {
+  // "1½" -> "1 1/2"
+  return text.replace(/[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]/g, (m) => ` ${UNICODE_FRACTIONS[m] ?? m} `).replace(/\s+/g, ' ');
+}
+
+function gcd(a: number, b: number): number {
+  let x = Math.abs(a);
+  let y = Math.abs(b);
+  while (y) {
+    const t = x % y;
+    x = y;
+    y = t;
+  }
+  return x || 1;
+}
+
+function formatQuantity(value: number): string {
+  if (!Number.isFinite(value)) return '';
+
+  const roundedInt = Math.round(value);
+  if (Math.abs(value - roundedInt) < 1e-9) return String(roundedInt);
+
+  // Prefer common cooking fractions (nearest 1/8) if it fits well.
+  const eighth = Math.round(value * 8) / 8;
+  if (Math.abs(value - eighth) < 0.02) {
+    const whole = Math.floor(eighth + 1e-9);
+    const frac = eighth - whole;
+    const num0 = Math.round(frac * 8);
+    const den0 = 8;
+    if (num0 === 0) return String(whole);
+    const g = gcd(num0, den0);
+    const num = num0 / g;
+    const den = den0 / g;
+    return whole > 0 ? `${whole} ${num}/${den}` : `${num}/${den}`;
+  }
+
+  // Fall back to a trimmed decimal.
+  return String(Math.round(value * 100) / 100).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
+}
+
+function parseQuantityToken(token: string): number | null {
+  const s = normalizeFractions(token).trim();
+
+  const mixed = s.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)\b/);
+  if (mixed) {
+    const whole = Number(mixed[1]);
+    const num = Number(mixed[2]);
+    const den = Number(mixed[3]);
+    if (Number.isFinite(whole) && Number.isFinite(num) && Number.isFinite(den) && den !== 0) {
+      return whole + num / den;
+    }
+  }
+
+  const frac = s.match(/^(\d+)\s*\/\s*(\d+)\b/);
+  if (frac) {
+    const num = Number(frac[1]);
+    const den = Number(frac[2]);
+    if (Number.isFinite(num) && Number.isFinite(den) && den !== 0) {
+      return num / den;
+    }
+  }
+
+  const dec = s.match(/^(\d+(?:\.\d+)?)/);
+  if (dec) {
+    const n = Number(dec[1]);
+    if (Number.isFinite(n)) return n;
+  }
+
+  return null;
+}
+
+function scaleLeadingQuantity(line: string, multiplier: number): string {
+  if (!line || !Number.isFinite(multiplier) || multiplier === 1) return line;
+
+  const normalized = normalizeFractions(line);
+
+  const qty = '(?:\\d+\\s+\\d+\\/\\d+|\\d+\\/\\d+|\\d+(?:\\.\\d+)?)';
+  const re = new RegExp(`^(\\s*)(${qty})(\\s*(?:-|–|to)\\s*(${qty}))?(.*)$`, 'i');
+  const m = normalized.match(re);
+  if (!m) return line;
+
+  const prefix = m[1] ?? '';
+  const a = m[2] ?? '';
+  const b = m[4] ?? '';
+  const suffix = (m[5] ?? '').replace(/\s+/g, ' ');
+
+  const aNum = parseQuantityToken(a);
+  if (aNum === null) return line;
+  const aScaled = formatQuantity(aNum * multiplier);
+
+  if (b) {
+    const bNum = parseQuantityToken(b);
+    if (bNum === null) return `${prefix}${aScaled}${suffix}`;
+    const bScaled = formatQuantity(bNum * multiplier);
+    const sep = (m[3] ?? '').replace(b, '').trim() || '-';
+    return `${prefix}${aScaled} ${sep} ${bScaled}${suffix}`.replace(/\s+/g, ' ').trim();
+  }
+
+  return `${prefix}${aScaled}${suffix}`.replace(/\s+/g, ' ').trim();
+}
+
+function scaleServingsLabel(recipe: Recipe, multiplier: number): string | null {
+  const baseText = (recipe.servingsText ?? '').trim();
+  const baseNum = typeof recipe.servings === 'number' && Number.isFinite(recipe.servings) ? recipe.servings : null;
+
+  if (!baseText && baseNum === null) return null;
+
+  if (baseText) {
+    const normalized = normalizeFractions(baseText);
+    const qtyRe = /(\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?)/g;
+    let count = 0;
+    const replaced = normalized.replace(qtyRe, (raw) => {
+      if (count >= 2) return raw;
+      const n = parseQuantityToken(raw);
+      if (n === null) return raw;
+      count += 1;
+      return formatQuantity(n * multiplier);
+    });
+
+    let label = replaced.trim();
+    if (/^\d/.test(label)) {
+      label = label.replace(/\bservings?\b/i, '').trim();
+      label = `Serves ${label}`;
+    } else if (/servings?\b/i.test(label) && !/^\s*serves\b/i.test(label)) {
+      label = label.replace(/\bservings?\b/i, '').trim();
+      label = label ? `Serves ${label}` : 'Serves';
+    }
+
+    return label;
+  }
+
+  return `Serves ${formatQuantity((baseNum ?? 0) * multiplier)}`;
+}
+
 export function App() {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selected, setSelected] = useState<Recipe | null>(null);
@@ -74,6 +231,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [checkedIngredientsByRecipeId, setCheckedIngredientsByRecipeId] = useState<Record<number, Record<number, boolean>>>({});
+  const [multiplierByRecipeId, setMultiplierByRecipeId] = useState<Record<number, number>>({});
 
   const selectedSummary = useMemo(() => recipes.find((r) => r.id === selectedId) ?? null, [recipes, selectedId]);
 
@@ -92,7 +250,19 @@ export function App() {
   }
 
   useEffect(() => {
-    void refreshList().catch((e) => setError(e instanceof Error ? e.message : 'Unknown error'));
+    void (async () => {
+      try {
+        const current = await authMe();
+        setUser(current);
+        if (current) {
+          await refreshList();
+        }
+      } catch (e) {
+        setUser(null);
+      } finally {
+        setAuthLoading(false);
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -189,10 +359,11 @@ export function App() {
     }
 
     const checked = checkedIngredientsByRecipeId[recipe.id] ?? {};
+    const multiplier = multiplierByRecipeId[recipe.id] ?? 1;
     return (
       <ul className="checklist">
         {items.map((raw, idx) => {
-          const label = raw;
+          const label = multiplier !== 1 ? scaleLeadingQuantity(raw, multiplier) : raw;
           const isChecked = Boolean(checked[idx]);
           return (
             <li key={`${recipe.id}:ing:${idx}`} className="checklist-item">
@@ -214,6 +385,39 @@ export function App() {
           );
         })}
       </ul>
+    );
+  }
+
+  function renderServingsAndMultiplier(recipe: Recipe) {
+    const multiplier = multiplierByRecipeId[recipe.id] ?? 1;
+    const label = scaleServingsLabel(recipe, multiplier);
+    if (!label) return null;
+
+    return (
+      <div className="servings-row">
+        <div className="servings-label">{label}</div>
+        <label className="multiplier">
+          <span>Multiplier</span>
+          <div className="multiplier-box">
+            <input
+              className="multiplier-input"
+              type="number"
+              inputMode="decimal"
+              min={0.1}
+              max={10}
+              step={0.1}
+              value={String(multiplier)}
+              onChange={(e) => {
+                const next = Number(e.target.value);
+                if (!Number.isFinite(next)) return;
+                const clamped = Math.min(10, Math.max(0.1, next));
+                setMultiplierByRecipeId((prev) => ({ ...prev, [recipe.id]: clamped }));
+              }}
+            />
+            <span className="multiplier-suffix">x</span>
+          </div>
+        </label>
+      </div>
     );
   }
 
@@ -335,6 +539,7 @@ export function App() {
                 <>
                   <RecipeBanner title={r.title} imageUrl={r.imageUrl} />
                   {r.description && <div className="recipe-subtitle">{r.description}</div>}
+                  {renderServingsAndMultiplier(r)}
 
                   <div className="row" style={{ justifyContent: 'space-between', marginTop: '0.8rem' }}>
                     <button className="btn danger" type="button" disabled={busy || selectedId !== r.id} onClick={onDeleteCurrent}>
@@ -365,15 +570,61 @@ export function App() {
     );
   }
 
+  async function onAuthenticated(nextUser: AuthUser) {
+    setUser(nextUser);
+    setSelectedId(null);
+    setSelected(null);
+    setError(null);
+    await refreshList(null);
+  }
+
+  async function onLogout() {
+    setError(null);
+    try {
+      await authLogout();
+    } catch {
+      // ignore
+    } finally {
+      setUser(null);
+      setRecipes([]);
+      setSelectedId(null);
+      setSelected(null);
+      setFullScreenRecipeId(null);
+      setFullScreenRecipeDetail(null);
+    }
+  }
+
+  if (authLoading) {
+    return (
+      <div className="container">
+        <div className="panel">
+          <div className="pre">Loading…</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthPage onAuthenticated={(u) => void onAuthenticated(u)} />;
+  }
+
   return (
     <div className="container">
       <header className="hero">
-        <h1>
-          Meal Rotation{' '}
-          {import.meta.env.DEV && (
-            <span className="dev-badge">DEV</span>
-          )}
-        </h1>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <h1 style={{ margin: 0 }}>
+            Meal Rotation{' '}
+            {import.meta.env.DEV && (
+              <span className="dev-badge">DEV</span>
+            )}
+          </h1>
+          <div className="row">
+            <div style={{ color: 'var(--muted)', fontWeight: 800, fontSize: '0.95rem' }}>{user.email}</div>
+            <button className="btn" type="button" onClick={() => void onLogout()}>
+              Logout
+            </button>
+          </div>
+        </div>
         <p>
           Add a recipe URL. The app will try to extract the recipe (JSON-LD) and present it in a consistent view.
           If scraping fails, you can still keep the link and re-scrape later.
@@ -452,6 +703,7 @@ export function App() {
                 <div>
                   <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>{selected.title}</div>
                   <div className="recipe-subtitle">{selected.description ?? ''}</div>
+                  {renderServingsAndMultiplier(selected)}
                 </div>
                 <div className="row">
                   <a className="btn" href={selected.sourceUrl} target="_blank" rel="noreferrer">
@@ -514,6 +766,87 @@ export function App() {
       </div>
 
       {error && <div className="panel" style={{ marginTop: '1.2rem', borderColor: 'rgba(251,113,133,0.35)' }}>{error}</div>}
+    </div>
+  );
+}
+
+function AuthPage({ onAuthenticated }: { onAuthenticated: (user: AuthUser) => void }) {
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit() {
+    try {
+      setSubmitting(true);
+      setError('');
+      const normalizedEmail = email.trim().toLowerCase();
+      const response =
+        mode === 'login'
+          ? await authLogin({ email: normalizedEmail, password })
+          : await authRegister({ email: normalizedEmail, password });
+      onAuthenticated(response.user);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Authentication failed');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="auth-shell">
+      <div className="panel auth-card">
+        <h1 className="auth-title">
+          Meal Rotation{' '}
+          {import.meta.env.DEV && (
+            <span className="dev-badge">DEV</span>
+          )}
+        </h1>
+        <p className="auth-subtitle">Sign in so each person has their own recipe list, notes, and checklists.</p>
+
+        <div className="row auth-mode-row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="auth-mode-title">{mode === 'login' ? 'Login' : 'Create account'}</div>
+          <div className="row" style={{ gap: '0.4rem' }}>
+            <button className={mode === 'login' ? 'btn primary' : 'btn'} type="button" onClick={() => setMode('login')}>
+              Login
+            </button>
+            <button className={mode === 'register' ? 'btn primary' : 'btn'} type="button" onClick={() => setMode('register')}>
+              Register
+            </button>
+          </div>
+        </div>
+
+        {error ? <div className="error">{error}</div> : null}
+
+        <div className="row" style={{ marginTop: '0.9rem' }}>
+          <input
+            className="input"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Email"
+          />
+        </div>
+
+        <div className="row" style={{ marginTop: '0.6rem' }}>
+          <input
+            className="input"
+            type="password"
+            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password (8+ chars)"
+          />
+        </div>
+
+        <div className="row" style={{ marginTop: '0.9rem', justifyContent: 'flex-end' }}>
+          <button className="btn primary" type="button" onClick={() => void submit()} disabled={submitting}>
+            {submitting ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

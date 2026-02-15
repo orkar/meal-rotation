@@ -5,6 +5,8 @@ export type Recipe = {
   sourceHost?: string | null;
   imageUrl?: string | null;
   description?: string | null;
+  servings?: number | null;
+  servingsText?: string | null;
   ingredients?: unknown;
   instructions?: unknown;
   scrapeStatus: 'pending' | 'ok' | 'error';
@@ -15,9 +17,15 @@ export type Recipe = {
   tags?: unknown;
 };
 
+export type AuthUser = {
+  id: number;
+  email: string;
+};
+
 async function apiFetch(path: string, init?: RequestInit) {
   const res = await fetch(`/api${path}`, {
     ...init,
+    credentials: 'include',
     headers: {
       // Only set content-type for JSON bodies; for GETs this header is misleading and can
       // cause some intermediaries to behave oddly.
@@ -54,6 +62,23 @@ async function apiFetch(path: string, init?: RequestInit) {
   }
 
   return body;
+}
+
+export async function authMe(): Promise<AuthUser | null> {
+  const data = await apiFetch('/auth/me');
+  return data.user;
+}
+
+export async function authRegister(payload: { email: string; password: string }): Promise<{ user: AuthUser }> {
+  return apiFetch('/auth/register', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function authLogin(payload: { email: string; password: string }): Promise<{ user: AuthUser }> {
+  return apiFetch('/auth/login', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function authLogout(): Promise<void> {
+  await apiFetch('/auth/logout', { method: 'POST' });
 }
 
 export async function listRecipes(): Promise<Recipe[]> {
