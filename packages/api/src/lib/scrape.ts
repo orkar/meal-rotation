@@ -67,19 +67,62 @@ function isRecipeType(typeValue: unknown): boolean {
   return false;
 }
 
-function pickImageUrl(image: unknown): string | undefined {
+function normalizeUrl(raw: unknown, base: URL): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+
+  // Protocol-relative URLs are common in metadata.
+  if (trimmed.startsWith('//')) {
+    return `https:${trimmed}`;
+  }
+
+  try {
+    return new URL(trimmed, base).toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function pickImageUrl(image: unknown, base: URL): string | undefined {
   if (typeof image === 'string') {
-    return image;
+    return normalizeUrl(image, base);
   }
+
   if (Array.isArray(image)) {
-    const first = image.find((v) => typeof v === 'string');
-    return typeof first === 'string' ? first : undefined;
-  }
-  if (typeof image === 'object' && image) {
-    const url = (image as Record<string, unknown>)['url'];
-    if (typeof url === 'string') {
-      return url;
+    for (const item of image) {
+      const picked = pickImageUrl(item, base);
+      if (picked) return picked;
     }
+    return undefined;
+  }
+
+  if (typeof image === 'object' && image) {
+    const obj = image as Record<string, unknown>;
+    // JSON-LD commonly uses url or contentUrl; some sites use thumbnailUrl.
+    return (
+      normalizeUrl(obj['url'], base) ||
+      normalizeUrl(obj['contentUrl'], base) ||
+      normalizeUrl(obj['thumbnailUrl'], base)
+    );
+  }
+
+  return undefined;
+}
+
+function pickMetaImageUrl($: cheerio.CheerioAPI, base: URL): string | undefined {
+  const candidates = [
+    $('meta[property="og:image:secure_url"]').attr('content'),
+    $('meta[property="og:image"]').attr('content'),
+    $('meta[name="og:image"]').attr('content'),
+    $('meta[name="twitter:image"]').attr('content'),
+    $('meta[property="twitter:image"]').attr('content'),
+    $('link[rel="image_src"]').attr('href')
+  ];
+
+  for (const c of candidates) {
+    const picked = normalizeUrl(c, base);
+    if (picked) return picked;
   }
   return undefined;
 }
@@ -172,6 +215,7 @@ export async function scrapeRecipe(sourceUrl: string): Promise<ScrapedRecipe> {
   if (!recipeNode) {
     return {
       title: titleFromHtml,
+      imageUrl: pickMetaImageUrl($, url),
       sourceHost: url.hostname
     };
   }
@@ -180,7 +224,7 @@ export async function scrapeRecipe(sourceUrl: string): Promise<ScrapedRecipe> {
   const description = typeof recipeNode['description'] === 'string' ? normalizeText(recipeNode['description']) : undefined;
   const ingredients = toStringArray(recipeNode['recipeIngredient']);
   const instructions = parseInstructions(recipeNode['recipeInstructions']);
-  const imageUrl = pickImageUrl(recipeNode['image']);
+  const imageUrl = pickImageUrl(recipeNode['image'], url) ?? pickMetaImageUrl($, url);
 
   return {
     title,

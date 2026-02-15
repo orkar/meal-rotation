@@ -10,11 +10,12 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: process.env.VITE_DEV_API_PROXY_TARGET ?? 'http://localhost:3001',
+        // Dev default matches docker-compose.dev.yml which exposes API as :3305 on the host.
+        // When running inside docker-compose, VITE_DEV_API_PROXY_TARGET is set to http://api:3001.
+        target: process.env.VITE_DEV_API_PROXY_TARGET ?? 'http://localhost:3305',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
       }
     }
   }
 });
-

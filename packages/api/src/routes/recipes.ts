@@ -140,6 +140,27 @@ router.put(
   })
 );
 
+router.delete(
+  '/:id',
+  asyncRoute(async (req, res) => {
+    const id = Number.parseInt(req.params.id ?? '', 10);
+    if (!Number.isInteger(id)) {
+      throw new HttpError(400, 'Invalid id');
+    }
+
+    try {
+      await prisma.recipe.delete({ where: { id } });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+        throw new HttpError(404, 'Recipe not found');
+      }
+      throw err;
+    }
+
+    res.json({ ok: true });
+  })
+);
+
 router.post(
   '/:id/rescrape',
   asyncRoute(async (req, res) => {

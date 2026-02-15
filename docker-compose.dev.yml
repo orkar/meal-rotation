@@ -29,7 +29,7 @@ services:
       CHOKIDAR_USEPOLLING: 'true'
     volumes:
       - ./:/app
-    command: sh -lc "apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/* && npm run prisma:generate && npx prisma migrate deploy && npm run seed && npm run dev -w packages/api"
+    command: sh -lc "apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/* && npm run prisma:generate && npx prisma migrate deploy && npm run seed && npm -w packages/api run dev"
     ports:
       - '3305:3001'
 
@@ -46,7 +46,9 @@ services:
       WATCHPACK_POLLING: 'true'
     volumes:
       - ./:/app
-    command: sh -lc "npm run dev -w packages/web -- --host 0.0.0.0 --port 5173"
+    # Use npm workspace flag in the supported position; otherwise Vite runs from /app,
+    # doesn't load packages/web/vite.config.mjs, and /api proxying + HMR break.
+    command: sh -lc "npm -w packages/web run dev -- --host 0.0.0.0 --port 5173"
     ports:
       - '4305:5173'
 
