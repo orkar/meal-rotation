@@ -81,6 +81,9 @@ const UNICODE_FRACTIONS: Record<string, string> = {
   '⅞': '7/8'
 };
 
+const MIN_MULTIPLIER = 0.1;
+const MAX_MULTIPLIER = 10;
+
 function normalizeFractions(text: string): string {
   // "1½" -> "1 1/2"
   return text.replace(/[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]/g, (m) => ` ${UNICODE_FRACTIONS[m] ?? m} `).replace(/\s+/g, ' ');
@@ -217,6 +220,10 @@ function scaleServingsLabel(recipe: Recipe, multiplier: number): string {
   return `Serves ${formatQuantity((baseNum ?? 1) * multiplier)}`;
 }
 
+function clampMultiplier(value: number): number {
+  return Math.min(MAX_MULTIPLIER, Math.max(MIN_MULTIPLIER, value));
+}
+
 export function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -234,6 +241,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [checkedIngredientsByRecipeId, setCheckedIngredientsByRecipeId] = useState<Record<number, Record<number, boolean>>>({});
   const [multiplierByRecipeId, setMultiplierByRecipeId] = useState<Record<number, number>>({});
+  const [multiplierDraftByRecipeId, setMultiplierDraftByRecipeId] = useState<Record<number, string>>({});
 
   const selectedSummary = useMemo(() => recipes.find((r) => r.id === selectedId) ?? null, [recipes, selectedId]);
 
@@ -393,6 +401,8 @@ export function App() {
   function renderServingsAndMultiplier(recipe: Recipe) {
     const multiplier = multiplierByRecipeId[recipe.id] ?? 1;
     const label = scaleServingsLabel(recipe, multiplier);
+    const multiplierDraft = multiplierDraftByRecipeId[recipe.id];
+    const multiplierInputValue = multiplierDraft ?? String(multiplier);
 
     return (
       <div className="servings-row">
@@ -404,15 +414,38 @@ export function App() {
               className="multiplier-input"
               type="number"
               inputMode="decimal"
-              min={0.1}
-              max={10}
+              min={MIN_MULTIPLIER}
+              max={MAX_MULTIPLIER}
               step={0.1}
-              value={String(multiplier)}
+              value={multiplierInputValue}
               onChange={(e) => {
-                const next = Number(e.target.value);
+                const raw = e.target.value;
+                setMultiplierDraftByRecipeId((prev) => ({ ...prev, [recipe.id]: raw }));
+
+                if (!raw.trim()) return;
+
+                const next = Number(raw);
                 if (!Number.isFinite(next)) return;
-                const clamped = Math.min(10, Math.max(0.1, next));
-                setMultiplierByRecipeId((prev) => ({ ...prev, [recipe.id]: clamped }));
+                if (next < MIN_MULTIPLIER || next > MAX_MULTIPLIER) return;
+
+                setMultiplierByRecipeId((prev) => ({ ...prev, [recipe.id]: next }));
+              }}
+              onBlur={(e) => {
+                const raw = e.target.value.trim();
+                const parsed = Number(raw);
+
+                setMultiplierByRecipeId((prev) => {
+                  const current = prev[recipe.id] ?? 1;
+                  const normalized = Number.isFinite(parsed) ? clampMultiplier(parsed) : current;
+                  return { ...prev, [recipe.id]: normalized };
+                });
+
+                setMultiplierDraftByRecipeId((prev) => {
+                  if (!(recipe.id in prev)) return prev;
+                  const next = { ...prev };
+                  delete next[recipe.id];
+                  return next;
+                });
               }}
             />
             <span className="multiplier-suffix">x</span>
@@ -576,6 +609,7 @@ export function App() {
     setSelectedId(null);
     setSelected(null);
     setError(null);
+    setMultiplierDraftByRecipeId({});
     await refreshList(null);
   }
 
@@ -592,6 +626,7 @@ export function App() {
       setSelected(null);
       setFullScreenRecipeId(null);
       setFullScreenRecipeDetail(null);
+      setMultiplierDraftByRecipeId({});
     }
   }
 
