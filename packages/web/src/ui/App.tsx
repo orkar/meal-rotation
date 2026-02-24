@@ -182,11 +182,13 @@ function scaleLeadingQuantity(line: string, multiplier: number): string {
   return `${prefix}${aScaled}${suffix}`.replace(/\s+/g, ' ').trim();
 }
 
-function scaleServingsLabel(recipe: Recipe, multiplier: number): string | null {
+function scaleServingsLabel(recipe: Recipe, multiplier: number): string {
   const baseText = (recipe.servingsText ?? '').trim();
   const baseNum = typeof recipe.servings === 'number' && Number.isFinite(recipe.servings) ? recipe.servings : null;
 
-  if (!baseText && baseNum === null) return null;
+  if (!baseText && baseNum === null) {
+    return `Serves ${formatQuantity(multiplier)}`;
+  }
 
   if (baseText) {
     const normalized = normalizeFractions(baseText);
@@ -212,7 +214,7 @@ function scaleServingsLabel(recipe: Recipe, multiplier: number): string | null {
     return label;
   }
 
-  return `Serves ${formatQuantity((baseNum ?? 0) * multiplier)}`;
+  return `Serves ${formatQuantity((baseNum ?? 1) * multiplier)}`;
 }
 
 export function App() {
@@ -391,7 +393,6 @@ export function App() {
   function renderServingsAndMultiplier(recipe: Recipe) {
     const multiplier = multiplierByRecipeId[recipe.id] ?? 1;
     const label = scaleServingsLabel(recipe, multiplier);
-    if (!label) return null;
 
     return (
       <div className="servings-row">
@@ -517,7 +518,7 @@ export function App() {
               Back
             </button>
             <div className="fs-title">{r?.title ?? 'Recipe'}</div>
-            <div className="row" style={{ justifyContent: 'flex-end' }}>
+            <div className="row fs-actions">
               {r?.sourceUrl && (
                 <a className="btn" href={r.sourceUrl} target="_blank" rel="noreferrer">
                   Open Source
